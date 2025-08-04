@@ -18,7 +18,16 @@
       </p>
       <label for="echoInput">Echo Text:</label>
       <input type="text" id="echoInput" name="echoInput" value="Hello World!" />
-      <button onclick="testEcho()">Click Me!</button>
+      <button onclick="testEcho()">Test Echo</button>
+      
+      <hr style="margin: 20px 0;">
+      
+      <h2>Fullscreen WebView Test</h2>
+      <label for="urlInput">Website URL:</label>
+      <input type="text" id="urlInput" name="urlInput" value="https://www.google.com" style="width: 300px;" />
+      <button onclick="openFullscreenWebView()">Open Fullscreen WebView</button>
+      
+      <div id="result" style="margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px;"></div>
     </main>
 
     <script src="./js/example.js" type="module"></script>
