@@ -7,17 +7,74 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
+import android.content.Context;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebSettings;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.graphics.Color;
+import java.lang.reflect.Method;
 
 public class FullscreenWebViewActivity extends Activity {
     
-    private WebView webView;
+    private CustomWebView webView;
     private String url;
+    
+    // Custom WebView class to disable virtual keyboard completely
+    public class CustomWebView extends WebView {
+        
+        public CustomWebView(Context context) {
+            super(context);
+        }
+        
+        @Override
+        public boolean onCheckIsTextEditor() {
+            // Always return false to prevent virtual keyboard from showing
+            return false;
+        }
+        
+        @Override
+        public boolean requestFocus(int direction, android.graphics.Rect previouslyFocusedRect) {
+            // Allow focus but prevent keyboard from showing
+            super.requestFocus(direction, previouslyFocusedRect);
+            hideKeyboard();
+            return true;
+        }
+        
+        // Note: requestFocus() is final in View class, so we handle keyboard hiding elsewhere
+        
+        @Override
+        public boolean dispatchKeyEvent(KeyEvent event) {
+            // Handle all key events directly without triggering input methods
+            return super.dispatchKeyEvent(event);
+        }
+        
+        @Override
+        public boolean onTouchEvent(android.view.MotionEvent event) {
+            // Handle touch events but prevent keyboard from showing
+            boolean result = super.onTouchEvent(event);
+            hideKeyboard();
+            return result;
+        }
+        
+        @Override
+        protected void onFocusChanged(boolean focused, int direction, android.graphics.Rect previouslyFocusedRect) {
+            super.onFocusChanged(focused, direction, previouslyFocusedRect);
+            if (focused) {
+                hideKeyboard();
+            }
+        }
+        
+        private void hideKeyboard() {
+            InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+                imm.hideSoftInputFromWindow(getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
+            }
+        }
+    }
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,8 +104,8 @@ public class FullscreenWebViewActivity extends Activity {
             return;
         }
         
-        // Create and configure WebView
-        webView = new WebView(this);
+        // Create and configure custom WebView (prevents virtual keyboard)
+        webView = new CustomWebView(this);
         webView.setLayoutParams(new android.view.ViewGroup.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
             android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -64,6 +121,18 @@ public class FullscreenWebViewActivity extends Activity {
         webSettings.setDisplayZoomControls(false);
         webSettings.setSupportZoom(true);
         webSettings.setDefaultTextEncodingName("utf-8");
+        
+        // Remote Desktop specific optimizations
+        webSettings.setMediaPlaybackRequiresUserGesture(false);
+        webSettings.setAllowFileAccess(true);
+        webSettings.setAllowContentAccess(true);
+        webSettings.setAllowUniversalAccessFromFileURLs(true);
+        webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        
+        // Enable better input handling for remote desktop
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.requestFocus();
         
         // Set WebView background to prevent white flash
         webView.setBackgroundColor(Color.BLACK);
@@ -84,10 +153,37 @@ public class FullscreenWebViewActivity extends Activity {
             }
         });
         
-        // Set WebChromeClient for better web app support
-        webView.setWebChromeClient(new WebChromeClient());
+        // Set WebChromeClient for better remote desktop support
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onShowCustomView(View view, CustomViewCallback callback) {
+                super.onShowCustomView(view, callback);
+                // Handle fullscreen video/content if needed
+            }
+        });
         
         setContentView(webView);
+        
+        // Aggressive keyboard suppression for remote desktop
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN 
+                                   | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+        
+        // Additional keyboard suppression using reflection (for stubborn keyboards)
+        try {
+            Method method = webView.getClass().getMethod("setShowSoftInputOnFocus", boolean.class);
+            method.setAccessible(true);
+            method.invoke(webView, false);
+        } catch (Exception e) {
+            // Fallback if reflection fails
+            webView.setFocusable(true);
+            webView.setFocusableInTouchMode(true);
+        }
+        
+        // Force hide any existing keyboard
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.hideSoftInputFromWindow(webView.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+        }
         
         // Load the URL
         webView.loadUrl(url);
@@ -109,6 +205,8 @@ public class FullscreenWebViewActivity extends Activity {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             hideSystemUI();
+            // Also force hide keyboard when window gains focus
+            forceHideKeyboard();
         }
     }
     
@@ -137,7 +235,66 @@ public class FullscreenWebViewActivity extends Activity {
                 // Prevent menu key from interfering
                 return true;
             default:
+                // For remote desktop: let WebView handle all other key events
+                if (webView != null) {
+                    return webView.dispatchKeyEvent(event);
+                }
                 return super.onKeyDown(keyCode, event);
+        }
+    }
+    
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        // For remote desktop applications: prioritize WebView input handling
+        if (webView != null && webView.hasFocus()) {
+            // Let WebView handle the key event first
+            if (webView.dispatchKeyEvent(event)) {
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+    
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView != null) {
+            webView.onResume();
+            webView.requestFocus();
+            
+            // Aggressive keyboard hiding for remote desktop
+            forceHideKeyboard();
+            
+            // Additional suppression using reflection
+            try {
+                Method method = webView.getClass().getMethod("setShowSoftInputOnFocus", boolean.class);
+                method.setAccessible(true);
+                method.invoke(webView, false);
+            } catch (Exception e) {
+                // Silent fail
+            }
+        }
+    }
+    
+    private void forceHideKeyboard() {
+        // Multiple approaches to ensure keyboard stays hidden
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.hideSoftInputFromWindow(webView.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+            imm.hideSoftInputFromWindow(webView.getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
+            imm.hideSoftInputFromWindow(webView.getWindowToken(), 0);
+        }
+        
+        // Set window flags to prevent keyboard
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN 
+                                   | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+    }
+    
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (webView != null) {
+            webView.onPause();
         }
     }
     
