@@ -225,7 +225,14 @@ public class FullscreenWebViewActivity extends Activity {
     
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        // Disable specific keys that might cause unwanted navigation on Android TV
+        /* 
+         * Android TV Remote Control Key Mappings for Remote Desktop:
+         * - Right Button → Shift+F10 (Context Menu)
+         * - Center/OK Button → Enter Key (pass through)
+         * - Back Button → Disabled (prevents accidental exit)
+         * - Menu Button → Disabled (prevents interference)
+         * - All other keys → Pass through to remote desktop
+         */
         switch (keyCode) {
             case KeyEvent.KEYCODE_BACK:
             case KeyEvent.KEYCODE_ESCAPE:
@@ -234,6 +241,19 @@ public class FullscreenWebViewActivity extends Activity {
             case KeyEvent.KEYCODE_MENU:
                 // Prevent menu key from interfering
                 return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                // Android TV Remote: Right button → Shift+F10 (Context Menu)
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    simulateShiftF10();
+                }
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                // Android TV Remote: Center/OK button → Enter key
+                if (webView != null) {
+                    return webView.dispatchKeyEvent(event);
+                }
+                return true;
             default:
                 // For remote desktop: let WebView handle all other key events
                 if (webView != null) {
@@ -241,6 +261,53 @@ public class FullscreenWebViewActivity extends Activity {
                 }
                 return super.onKeyDown(keyCode, event);
         }
+    }
+    
+    private void simulateShiftF10() {
+        if (webView == null) return;
+        
+        long eventTime = System.currentTimeMillis();
+        
+        // Create Shift key down event
+        KeyEvent shiftDown = new KeyEvent(
+            eventTime, eventTime,
+            KeyEvent.ACTION_DOWN,
+            KeyEvent.KEYCODE_SHIFT_LEFT,
+            0, KeyEvent.META_SHIFT_ON
+        );
+        
+        // Create F10 key down event with Shift modifier
+        KeyEvent f10Down = new KeyEvent(
+            eventTime, eventTime,
+            KeyEvent.ACTION_DOWN,
+            KeyEvent.KEYCODE_F10,
+            0, KeyEvent.META_SHIFT_ON
+        );
+        
+        // Create F10 key up event with Shift modifier
+        KeyEvent f10Up = new KeyEvent(
+            eventTime, eventTime,
+            KeyEvent.ACTION_UP,
+            KeyEvent.KEYCODE_F10,
+            0, KeyEvent.META_SHIFT_ON
+        );
+        
+        // Create Shift key up event
+        KeyEvent shiftUp = new KeyEvent(
+            eventTime, eventTime,
+            KeyEvent.ACTION_UP,
+            KeyEvent.KEYCODE_SHIFT_LEFT,
+            0, 0
+        );
+        
+        // Send the key sequence to WebView
+        webView.dispatchKeyEvent(shiftDown);
+        webView.dispatchKeyEvent(f10Down);
+        webView.dispatchKeyEvent(f10Up);
+        webView.dispatchKeyEvent(shiftUp);
+        
+        // Debug log
+        android.util.Log.d("FullscreenWebView", "Simulated Shift+F10 for context menu");
     }
     
     @Override
