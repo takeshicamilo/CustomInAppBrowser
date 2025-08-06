@@ -239,7 +239,6 @@ public class FullscreenWebViewActivity extends Activity {
                 // Android TV Remote: Back button → Context Menu (your request!)
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     android.util.Log.e("FullscreenWebView", "BACK BUTTON PRESSED - Triggering context menu");
-                    Toast.makeText(this, "Back Button → Context Menu", Toast.LENGTH_SHORT).show();
                     simulateShiftF10();
                 }
                 return true;
@@ -250,7 +249,6 @@ public class FullscreenWebViewActivity extends Activity {
                 // Menu key can also trigger context menu
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     android.util.Log.e("FullscreenWebView", "MENU BUTTON PRESSED - Triggering context menu");
-                    Toast.makeText(this, "Menu Button → Context Menu", Toast.LENGTH_SHORT).show();
                     simulateShiftF10();
                 }
                 return true;
@@ -258,7 +256,6 @@ public class FullscreenWebViewActivity extends Activity {
                 // Android TV Remote: Right button → Context Menu
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     android.util.Log.e("FullscreenWebView", "RIGHT DPAD PRESSED - Triggering context menu");
-                    Toast.makeText(this, "Right Button → Context Menu", Toast.LENGTH_SHORT).show();
                     simulateShiftF10();
                 }
                 return true;
