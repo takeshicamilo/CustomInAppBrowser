@@ -1,6 +1,6 @@
 {
   "name": "custominappbrowser",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "This is a copy of the inappbrowser from capacitor",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",

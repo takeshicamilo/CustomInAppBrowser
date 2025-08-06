@@ -15,8 +15,8 @@ import android.webkit.WebSettings;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.graphics.Color;
+import android.widget.Toast;
 import java.lang.reflect.Method;
-import android.view.ContextMenu;
 
 public class FullscreenWebViewActivity extends Activity {
     
@@ -163,16 +163,6 @@ public class FullscreenWebViewActivity extends Activity {
             }
         });
         
-        // ADD THIS: Enable context menu support
-        webView.setLongClickable(true);
-        webView.setOnCreateContextMenuListener(new View.OnCreateContextMenuListener() {
-            @Override
-            public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
-                // Context menu will be created by the web page's JavaScript
-                android.util.Log.d("FullscreenWebView", "Context menu created");
-            }
-        });
-        
         setContentView(webView);
         
         // Aggressive keyboard suppression for remote desktop
@@ -236,9 +226,6 @@ public class FullscreenWebViewActivity extends Activity {
     
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        // ADD LOGGING to debug key events
-        android.util.Log.d("FullscreenWebView", "Key pressed: " + keyCode + " (" + KeyEvent.keyCodeToString(keyCode) + ")");
-        
         /* 
          * Android TV Remote Control Key Mappings for Remote Desktop:
          * - Right Button → Shift+F10 (Context Menu)
@@ -249,16 +236,29 @@ public class FullscreenWebViewActivity extends Activity {
          */
         switch (keyCode) {
             case KeyEvent.KEYCODE_BACK:
+                // Android TV Remote: Back button → Context Menu (your request!)
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    android.util.Log.e("FullscreenWebView", "BACK BUTTON PRESSED - Triggering context menu");
+                    Toast.makeText(this, "Back Button → Context Menu", Toast.LENGTH_SHORT).show();
+                    simulateShiftF10();
+                }
+                return true;
             case KeyEvent.KEYCODE_ESCAPE:
-                // Prevent back button and escape key from closing the webview
+                // Prevent escape key from closing the webview
                 return true;
             case KeyEvent.KEYCODE_MENU:
-                // Prevent menu key from interfering
+                // Menu key can also trigger context menu
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    android.util.Log.e("FullscreenWebView", "MENU BUTTON PRESSED - Triggering context menu");
+                    Toast.makeText(this, "Menu Button → Context Menu", Toast.LENGTH_SHORT).show();
+                    simulateShiftF10();
+                }
                 return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                // Android TV Remote: Right button → Shift+F10 (Context Menu)
-                android.util.Log.d("FullscreenWebView", "RIGHT button detected - triggering context menu");
+                // Android TV Remote: Right button → Context Menu
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    android.util.Log.e("FullscreenWebView", "RIGHT DPAD PRESSED - Triggering context menu");
+                    Toast.makeText(this, "Right Button → Context Menu", Toast.LENGTH_SHORT).show();
                     simulateShiftF10();
                 }
                 return true;
@@ -281,107 +281,48 @@ public class FullscreenWebViewActivity extends Activity {
     private void simulateShiftF10() {
         if (webView == null) return;
         
-        android.util.Log.d("FullscreenWebView", "Simulating Shift+F10 for virtual computer context menu");
+        android.util.Log.d("FullscreenWebView", "RIGHT BUTTON PRESSED - Starting context menu simulation");
         
-        // For virtual computers/remote desktop: Send proper keyboard events via JavaScript
-        // This ensures the virtual computer receives the actual key presses
-        webView.evaluateJavascript(
-            "(function() {" +
-            "  console.log('Sending Shift+F10 to virtual computer');" +
-            "  " +
-            "  // Method 1: Dispatch keyboard events that virtual computers can intercept" +
-            "  var shiftDownEvent = new KeyboardEvent('keydown', {" +
-            "    key: 'Shift'," +
-            "    code: 'ShiftLeft'," +
-            "    keyCode: 16," +
-            "    which: 16," +
-            "    shiftKey: true," +
-            "    bubbles: true," +
-            "    cancelable: true" +
-            "  });" +
-            "  " +
-            "  var f10DownEvent = new KeyboardEvent('keydown', {" +
-            "    key: 'F10'," +
-            "    code: 'F10'," +
-            "    keyCode: 121," +
-            "    which: 121," +
-            "    shiftKey: true," +
-            "    bubbles: true," +
-            "    cancelable: true" +
-            "  });" +
-            "  " +
-            "  var f10UpEvent = new KeyboardEvent('keyup', {" +
-            "    key: 'F10'," +
-            "    code: 'F10'," +
-            "    keyCode: 121," +
-            "    which: 121," +
-            "    shiftKey: true," +
-            "    bubbles: true," +
-            "    cancelable: true" +
-            "  });" +
-            "  " +
-            "  var shiftUpEvent = new KeyboardEvent('keyup', {" +
-            "    key: 'Shift'," +
-            "    code: 'ShiftLeft'," +
-            "    keyCode: 16," +
-            "    which: 16," +
-            "    shiftKey: false," +
-            "    bubbles: true," +
-            "    cancelable: true" +
-            "  });" +
-            "  " +
-            "  // Send events to the document (virtual computer will receive these)" +
-            "  document.dispatchEvent(shiftDownEvent);" +
-            "  document.dispatchEvent(f10DownEvent);" +
-            "  document.dispatchEvent(f10UpEvent);" +
-            "  document.dispatchEvent(shiftUpEvent);" +
-            "  " +
-            "  // Method 2: Also try sending to focused element (for better compatibility)" +
-            "  if (document.activeElement) {" +
-            "    document.activeElement.dispatchEvent(shiftDownEvent.cloneNode ? shiftDownEvent : new KeyboardEvent('keydown', shiftDownEvent));" +
-            "    document.activeElement.dispatchEvent(f10DownEvent.cloneNode ? f10DownEvent : new KeyboardEvent('keydown', f10DownEvent));" +
-            "    document.activeElement.dispatchEvent(f10UpEvent.cloneNode ? f10UpEvent : new KeyboardEvent('keyup', f10UpEvent));" +
-            "    document.activeElement.dispatchEvent(shiftUpEvent.cloneNode ? shiftUpEvent : new KeyboardEvent('keyup', shiftUpEvent));" +
-            "  }" +
-            "  " +
-            "  // Method 3: For some virtual computers, also try window events" +
-            "  if (window.dispatchEvent) {" +
-            "    window.dispatchEvent(shiftDownEvent);" +
-            "    window.dispatchEvent(f10DownEvent);" +
-            "    window.dispatchEvent(f10UpEvent);" +
-            "    window.dispatchEvent(shiftUpEvent);" +
-            "  }" +
-            "  " +
-            "  console.log('Shift+F10 events sent to virtual computer');" +
-            "})()", 
-            null
-        );
+        // Primary approach: Your proven Shift+F10 method
+        simulateShiftF10Keys();
         
-        // Also keep the original Android key event dispatch as backup
-        // Some virtual computer solutions might still need this
-        long eventTime = System.currentTimeMillis();
+        // Fallback approaches if needed
+        // simulateRightClick();
+
         
-        KeyEvent shiftDown = new KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SHIFT_LEFT, 0, KeyEvent.META_SHIFT_ON);
-        KeyEvent f10Down = new KeyEvent(eventTime, eventTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_F10, 0, KeyEvent.META_SHIFT_ON);
-        KeyEvent f10Up = new KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_F10, 0, KeyEvent.META_SHIFT_ON);
-        KeyEvent shiftUp = new KeyEvent(eventTime, eventTime, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SHIFT_LEFT, 0, 0);
-        
-        webView.dispatchKeyEvent(shiftDown);
-        webView.dispatchKeyEvent(f10Down);
-        webView.dispatchKeyEvent(f10Up);
-        webView.dispatchKeyEvent(shiftUp);
+        android.util.Log.d("FullscreenWebView", "Context menu simulation completed");
     }
+
+    private void simulateShiftF10Keys() {
+        try {
+            // Using your exact approach - full KeyEvent constructor
+            KeyEvent sd = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SHIFT_RIGHT, 0, 0, 0, 0);
+            KeyEvent kd = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_F10, 0, 0, 0, 0);
+            KeyEvent ku = new KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_F10, 0, 0, 0, 0);
+            KeyEvent su = new KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SHIFT_RIGHT, 0, 0, 0, 0);
+
+            android.util.Log.e("FullscreenWebView", "Sending Shift+F10 sequence");
+
+            boolean result1 = webView.dispatchKeyEvent(sd);
+            boolean result2 = webView.dispatchKeyEvent(kd);
+            boolean result3 = webView.dispatchKeyEvent(ku);
+            boolean result4 = webView.dispatchKeyEvent(su);
+            
+            android.util.Log.d("FullscreenWebView", String.format(
+                "Shift+F10 key events - Shift Down: %b, F10 Down: %b, F10 Up: %b, Shift Up: %b", 
+                result1, result2, result3, result4
+            ));
+        } catch (Exception e) {
+            android.util.Log.e("FullscreenWebView", "Shift+F10 simulation failed: " + e.getMessage());
+        }
+    }
+    
     
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        // MODIFY THIS: Don't intercept DPAD_RIGHT events
-        if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            // Let onKeyDown handle DPAD_RIGHT events
-            return super.dispatchKeyEvent(event);
-        }
-        
-        // For remote desktop applications: prioritize WebView input handling for other keys
+        // For remote desktop applications: prioritize WebView input handling
         if (webView != null && webView.hasFocus()) {
+            // Let WebView handle the key event first
             if (webView.dispatchKeyEvent(event)) {
                 return true;
             }
