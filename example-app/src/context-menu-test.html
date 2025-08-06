@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Context Menu Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .test-area {
+            background-color: white;
+            border: 2px solid #333;
+            padding: 30px;
+            margin: 20px 0;
+            border-radius: 10px;
+        }
+        .instructions {
+            background-color: #e8f4fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        .context-log {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 Context Menu Test Page</h1>
+    
+    <div class="instructions">
+        <h3>📱 TV Box Testing Instructions:</h3>
+        <ol>
+            <li><strong>Press RIGHT button</strong> on your TV remote anywhere on this page</li>
+            <li><strong>Look for:</strong> Context menu to appear</li>
+            <li><strong>Check for:</strong> Toast message "Right Button Pressed - Attempting Context Menu"</li>
+            <li><strong>Test different areas:</strong> Try right-clicking on text fields, buttons, and text areas below</li>
+        </ol>
+    </div>
+
+    <div class="test-area">
+        <h3>🔍 Test Area 1: Text Input</h3>
+        <p>Right-click (press RIGHT button) on this input field:</p>
+        <input type="text" placeholder="Right-click here to test context menu" value="Test context menu on this text">
+    </div>
+
+    <div class="test-area">
+        <h3>📝 Test Area 2: Text Area</h3>
+        <p>Right-click (press RIGHT button) on this text area:</p>
+        <textarea rows="4" placeholder="Right-click here to test context menu">This is a text area for testing context menus.
+Try right-clicking here with your TV remote's RIGHT button.</textarea>
+    </div>
+
+    <div class="test-area">
+        <h3>🖱️ Test Area 3: Regular Text</h3>
+        <p>Right-click (press RIGHT button) on this text:</p>
+        <div style="padding: 20px; background-color: #f8f9fa; border: 1px dashed #666;">
+            This is regular text. Try right-clicking anywhere in this box using your TV remote's RIGHT button.
+            You should see a context menu appear if the Shift+F10 simulation is working correctly.
+        </div>
+    </div>
+
+    <div class="test-area">
+        <h3>🔘 Test Area 4: Buttons</h3>
+        <p>Right-click (press RIGHT button) on these buttons:</p>
+        <button onclick="logEvent('Button 1 clicked')">Test Button 1</button>
+        <button onclick="logEvent('Button 2 clicked')">Test Button 2</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div class="test-area">
+        <h3>📋 Event Log</h3>
+        <div id="eventLog" class="context-log">
+            <p><em>Events will be logged here...</em></p>
+        </div>
+    </div>
+
+    <script>
+        let eventCount = 0;
+
+        function logEvent(message) {
+            eventCount++;
+            const log = document.getElementById('eventLog');
+            const timestamp = new Date().toLocaleTimeString();
+            log.innerHTML += `<div><strong>[${eventCount}] ${timestamp}:</strong> ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('eventLog').innerHTML = '<p><em>Log cleared...</em></p>';
+            eventCount = 0;
+        }
+
+        // Log context menu events
+        document.addEventListener('contextmenu', function(e) {
+            logEvent(`Context menu triggered at (${e.clientX}, ${e.clientY}) on ${e.target.tagName}`);
+        });
+
+        // Log key events
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'F10' && e.shiftKey) {
+                logEvent('Shift+F10 detected!');
+            }
+        });
+
+        // Log when page loads
+        window.addEventListener('load', function() {
+            logEvent('Context Menu Test Page loaded - Ready for testing!');
+        });
+    </script>
+</body>
+</html>
