@@ -320,6 +320,11 @@ public class FullscreenWebViewActivity extends Activity {
     
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // Skip back button processing here since we handle it in onKeyDown
+        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+            return super.dispatchKeyEvent(event);
+        }
+        
         // For remote desktop applications: prioritize WebView input handling
         if (webView != null && webView.hasFocus()) {
             // Let WebView handle the key event first
