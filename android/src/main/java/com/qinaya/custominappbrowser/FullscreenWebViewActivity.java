@@ -264,9 +264,10 @@ public class FullscreenWebViewActivity extends Activity {
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
-                // Android TV Remote: Center/OK button → Enter key
-                if (webView != null) {
-                    return webView.dispatchKeyEvent(event);
+                // Android TV Remote: Center/OK button → Classic Enter key
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    android.util.Log.e("FullscreenWebView", "CENTER/ENTER BUTTON PRESSED - Sending Enter key");
+                    simulateEnterKey();
                 }
                 return true;
             default:
@@ -275,6 +276,27 @@ public class FullscreenWebViewActivity extends Activity {
                     return webView.dispatchKeyEvent(event);
                 }
                 return super.onKeyDown(keyCode, event);
+        }
+    }
+
+    private void simulateEnterKey() {
+        if (webView == null) return;
+        
+        try {
+            android.util.Log.e("FullscreenWebView", "Sending Enter key sequence");
+            
+            // Create proper Enter key events
+            KeyEvent enterDown = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER, 0, 0, 0, 0);
+            KeyEvent enterUp = new KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER, 0, 0, 0, 0);
+            
+            boolean result1 = webView.dispatchKeyEvent(enterDown);
+            boolean result2 = webView.dispatchKeyEvent(enterUp);
+            
+            android.util.Log.d("FullscreenWebView", String.format(
+                "Enter key events - Down: %b, Up: %b", result1, result2
+            ));
+        } catch (Exception e) {
+            android.util.Log.e("FullscreenWebView", "Enter key simulation failed: " + e.getMessage());
         }
     }
     
