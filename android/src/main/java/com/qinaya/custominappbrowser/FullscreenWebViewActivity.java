@@ -23,7 +23,7 @@ public class FullscreenWebViewActivity extends Activity {
     private CustomWebView webView;
     private String url;
     
-    // Custom WebView class to disable virtual keyboard completely
+    // Custom WebView class to hide soft keyboard while preserving IME for accents
     public class CustomWebView extends WebView {
         
         public CustomWebView(Context context) {
@@ -32,8 +32,9 @@ public class FullscreenWebViewActivity extends Activity {
         
         @Override
         public boolean onCheckIsTextEditor() {
-            // Always return false to prevent virtual keyboard from showing
-            return false;
+            // Allow IME for accent composition but don't show soft keyboard
+            // This preserves dead key functionality for Latin layouts
+            return true;
         }
         
         @Override
@@ -69,9 +70,10 @@ public class FullscreenWebViewActivity extends Activity {
         }
         
         private void hideKeyboard() {
+            // Only hide the visual keyboard, don't disable IME completely
             InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
             if (imm != null) {
-                imm.hideSoftInputFromWindow(getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+                // Use gentler hiding that preserves IME functionality
                 imm.hideSoftInputFromWindow(getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
             }
         }
@@ -165,11 +167,11 @@ public class FullscreenWebViewActivity extends Activity {
         
         setContentView(webView);
         
-        // Aggressive keyboard suppression for remote desktop
+        // Gentle keyboard suppression for Android TV (preserves IME for accents)
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN 
                                    | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         
-        // Additional keyboard suppression using reflection (for stubborn keyboards)
+        // One-time soft keyboard hiding setup (preserves IME functionality)
         try {
             Method method = webView.getClass().getMethod("setShowSoftInputOnFocus", boolean.class);
             method.setAccessible(true);
@@ -178,12 +180,6 @@ public class FullscreenWebViewActivity extends Activity {
             // Fallback if reflection fails
             webView.setFocusable(true);
             webView.setFocusableInTouchMode(true);
-        }
-        
-        // Force hide any existing keyboard
-        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) {
-            imm.hideSoftInputFromWindow(webView.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
         }
         
         // Load the URL
@@ -206,8 +202,7 @@ public class FullscreenWebViewActivity extends Activity {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             hideSystemUI();
-            // Also force hide keyboard when window gains focus
-            forceHideKeyboard();
+            // Don't force hide keyboard here - breaks accent composition
         }
     }
     
@@ -228,10 +223,10 @@ public class FullscreenWebViewActivity extends Activity {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         /* 
          * Android TV Remote Control Key Mappings for Remote Desktop:
+         * - Back Button → Shift+F10 (Context Menu)
+         * - Center/OK Button → Classic Enter key
          * - Right Button → Shift+F10 (Context Menu)
-         * - Center/OK Button → Enter Key (pass through)
-         * - Back Button → Disabled (prevents accidental exit)
-         * - Menu Button → Disabled (prevents interference)
+         * - Menu Button → Shift+F10 (Context Menu)
          * - All other keys → Pass through to remote desktop
          */
         switch (keyCode) {
@@ -361,32 +356,9 @@ public class FullscreenWebViewActivity extends Activity {
             webView.onResume();
             webView.requestFocus();
             
-            // Aggressive keyboard hiding for remote desktop
-            forceHideKeyboard();
-            
-            // Additional suppression using reflection
-            try {
-                Method method = webView.getClass().getMethod("setShowSoftInputOnFocus", boolean.class);
-                method.setAccessible(true);
-                method.invoke(webView, false);
-            } catch (Exception e) {
-                // Silent fail
-            }
+            // Don't re-suppress IME on resume - this breaks accents
+            // The initial setup in onCreate is sufficient
         }
-    }
-    
-    private void forceHideKeyboard() {
-        // Multiple approaches to ensure keyboard stays hidden
-        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) {
-            imm.hideSoftInputFromWindow(webView.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
-            imm.hideSoftInputFromWindow(webView.getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
-            imm.hideSoftInputFromWindow(webView.getWindowToken(), 0);
-        }
-        
-        // Set window flags to prevent keyboard
-        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN 
-                                   | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
     }
     
     @Override
