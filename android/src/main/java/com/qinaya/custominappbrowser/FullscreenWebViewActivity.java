@@ -27,9 +27,7 @@ public class FullscreenWebViewActivity extends Activity {
     // Track selection ActionMode to avoid first-Back being eaten after left click
     private ActionMode selectionMode;
 
-    // Track recent primary (left) mouse presses to disambiguate BACK from right-click
-    private static final long RIGHT_CLICK_BACK_DETECT_WINDOW_MS = 1200L; // within 1.2s after left click
-    private long lastPrimaryDownUptimeMs = 0L;
+    // After any primary (left) click, treat the next mouse BACK as right-click until consumed
     private boolean hadPrimaryDownSinceLastRight = false;
 
     // Keep WebView simple; do NOT fight the IME here — that breaks accents.
@@ -48,10 +46,7 @@ public class FullscreenWebViewActivity extends Activity {
                     isMouseDevice = dev != null && dev.supportsSource(InputDevice.SOURCE_MOUSE);
                 } catch (Throwable ignored) {}
 
-                long now = SystemClock.uptimeMillis();
-                boolean withinWindow = hadPrimaryDownSinceLastRight && (now - lastPrimaryDownUptimeMs) <= RIGHT_CLICK_BACK_DETECT_WINDOW_MS;
-
-                if (isMouseDevice && withinWindow) {
+                if (isMouseDevice && hadPrimaryDownSinceLastRight) {
                     if (selectionMode != null) {
                         selectionMode.finish();
                     }
@@ -159,7 +154,6 @@ public class FullscreenWebViewActivity extends Activity {
                 // Record recent primary press to detect BACK→right-click translations
                 if (action == MotionEvent.ACTION_BUTTON_PRESS
                         && e.getActionButton() == MotionEvent.BUTTON_PRIMARY) {
-                    lastPrimaryDownUptimeMs = SystemClock.uptimeMillis();
                     hadPrimaryDownSinceLastRight = true;
                 }
             }
@@ -178,7 +172,6 @@ public class FullscreenWebViewActivity extends Activity {
 
                 if (e.getActionMasked() == MotionEvent.ACTION_DOWN
                         && (e.getButtonState() & MotionEvent.BUTTON_PRIMARY) != 0) {
-                    lastPrimaryDownUptimeMs = SystemClock.uptimeMillis();
                     hadPrimaryDownSinceLastRight = true;
                 }
             }
