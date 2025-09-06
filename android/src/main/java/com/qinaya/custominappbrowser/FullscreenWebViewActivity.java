@@ -2,8 +2,13 @@ package com.qinaya.custominappbrowser;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.os.Build;                  // NEW
 import android.os.Bundle;
+import android.os.SystemClock;            // NEW
+import android.view.ActionMode;           // NEW
+import android.view.InputDevice;          // NEW
 import android.view.KeyEvent;
+import android.view.MotionEvent;          // NEW
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -12,107 +17,101 @@ import android.content.Context;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebSettings;
-import android.webkit.ValueCallback;
-import android.webkit.WebChromeClient;
 import android.graphics.Color;
-import android.widget.Toast;
-import java.lang.reflect.Method;
 
 public class FullscreenWebViewActivity extends Activity {
-    
+
     private CustomWebView webView;
     private String url;
-    
-    // Custom WebView class to disable virtual keyboard completely
+
+    // Track selection ActionMode to avoid first-Back being eaten after left click
+    private ActionMode selectionMode;     // NEW
+
+    // Track recent primary (left) mouse presses to disambiguate BACK from right-click
+    private static final long RIGHT_CLICK_BACK_DETECT_WINDOW_MS = 1200L; // within 1.2s after left click
+    private long lastPrimaryDownUptimeMs = 0L;
+    private boolean hadPrimaryDownSinceLastRight = false;
+
+    // Keep WebView simple; do NOT fight the IME here — that breaks accents.
     public class CustomWebView extends WebView {
-        
         public CustomWebView(Context context) {
             super(context);
         }
-        
-        @Override
-        public boolean onCheckIsTextEditor() {
-            // Always return false to prevent virtual keyboard from showing
-            return false;
-        }
-        
+
         @Override
         public boolean requestFocus(int direction, android.graphics.Rect previouslyFocusedRect) {
-            // Allow focus but prevent keyboard from showing
-            super.requestFocus(direction, previouslyFocusedRect);
-            hideKeyboard();
-            return true;
+            // Allow normal focus (needed for composition/accents)
+            return super.requestFocus(direction, previouslyFocusedRect);
         }
-        
-        // Note: requestFocus() is final in View class, so we handle keyboard hiding elsewhere
-        
+
+        @Override
+        public boolean dispatchKeyEventPreIme(KeyEvent event) {
+            // Intercept BACK generated from mouse right-click before WebView/text editor consumes it
+            if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_DOWN) {
+                boolean isMouseDevice = false;
+                try {
+                    InputDevice dev = InputDevice.getDevice(event.getDeviceId());
+                    isMouseDevice = dev != null && dev.supportsSource(InputDevice.SOURCE_MOUSE);
+                } catch (Throwable ignored) {}
+
+                long now = SystemClock.uptimeMillis();
+                boolean withinWindow = hadPrimaryDownSinceLastRight && (now - lastPrimaryDownUptimeMs) <= RIGHT_CLICK_BACK_DETECT_WINDOW_MS;
+
+                if (isMouseDevice && withinWindow) {
+                    if (selectionMode != null) {
+                        selectionMode.finish();
+                    }
+                    simulateShiftF10Keys();
+                    hadPrimaryDownSinceLastRight = false; // consume this pairing
+                    return true;
+                }
+            }
+            return super.dispatchKeyEventPreIme(event);
+        }
+
         @Override
         public boolean dispatchKeyEvent(KeyEvent event) {
-            // Handle all key events directly without triggering input methods
             return super.dispatchKeyEvent(event);
         }
-        
+
         @Override
-        public boolean onTouchEvent(android.view.MotionEvent event) {
-            // Handle touch events but prevent keyboard from showing
-            boolean result = super.onTouchEvent(event);
-            hideKeyboard();
-            return result;
-        }
-        
-        @Override
-        protected void onFocusChanged(boolean focused, int direction, android.graphics.Rect previouslyFocusedRect) {
-            super.onFocusChanged(focused, direction, previouslyFocusedRect);
-            if (focused) {
-                hideKeyboard();
-            }
-        }
-        
-        private void hideKeyboard() {
-            InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-            if (imm != null) {
-                imm.hideSoftInputFromWindow(getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
-                imm.hideSoftInputFromWindow(getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
-            }
+        public boolean onTouchEvent(MotionEvent event) {
+            return super.onTouchEvent(event);
         }
     }
-    
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
-        // Remove title bar and make fullscreen
+
+        // Fullscreen chrome
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                            WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        
-        // Hide navigation bar and status bar for true fullscreen
+                             WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().getDecorView().setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+          | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+          | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+          | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+          | View.SYSTEM_UI_FLAG_FULLSCREEN
+          | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         );
-        
-        // Get URL from intent
+
+        // URL
         Intent intent = getIntent();
         url = intent.getStringExtra("url");
-        
         if (url == null || url.isEmpty()) {
             finish();
             return;
         }
-        
-        // Create and configure custom WebView (prevents virtual keyboard)
+
+        // WebView
         webView = new CustomWebView(this);
         webView.setLayoutParams(new android.view.ViewGroup.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
             android.view.ViewGroup.LayoutParams.MATCH_PARENT
         ));
-        
-        // Configure WebView settings
+
         WebSettings webSettings = webView.getSettings();
         webSettings.setJavaScriptEnabled(true);
         webSettings.setDomStorageEnabled(true);
@@ -122,262 +121,180 @@ public class FullscreenWebViewActivity extends Activity {
         webSettings.setDisplayZoomControls(false);
         webSettings.setSupportZoom(true);
         webSettings.setDefaultTextEncodingName("utf-8");
-        
-        // Remote Desktop specific optimizations
+
+        // Remote-desktop friendly
         webSettings.setMediaPlaybackRequiresUserGesture(false);
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setAllowUniversalAccessFromFileURLs(true);
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        
-        // Enable better input handling for remote desktop
+
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
-        webView.requestFocus();
-        
-        // Set WebView background to prevent white flash
+        webView.requestFocus(); // do this once on create; do NOT keep re-requesting later
+
         webView.setBackgroundColor(Color.BLACK);
-        
-        // Set WebViewClient to handle page navigation
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                view.loadUrl(url);
+
+        // Keep navigation inside the WebView
+        webView.setWebViewClient(new WebViewClient());
+
+        // Remote-desktop: prevent native text-selection/context CAB since we don't need it
+        webView.setLongClickable(false);                                // NEW (optional for RDP)
+        webView.setOnLongClickListener(v -> true);                      // NEW (optional for RDP)
+
+        // API 23+: catch real context-clicks regardless of selection state
+        if (Build.VERSION.SDK_INT >= 23) {                              // NEW
+            webView.setOnContextClickListener(v -> {                    // NEW
+                simulateShiftF10Keys();
+                hadPrimaryDownSinceLastRight = false;
                 return true;
-            }
-            
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                // Hide system UI again after page load
-                hideSystemUI();
-            }
-        });
-        
-        // Set WebChromeClient for better remote desktop support
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onShowCustomView(View view, CustomViewCallback callback) {
-                super.onShowCustomView(view, callback);
-                // Handle fullscreen video/content if needed
-            }
-        });
-        
-        setContentView(webView);
-        
-        // Aggressive keyboard suppression for remote desktop
-        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN 
-                                   | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
-        
-        // Additional keyboard suppression using reflection (for stubborn keyboards)
-        try {
-            Method method = webView.getClass().getMethod("setShowSoftInputOnFocus", boolean.class);
-            method.setAccessible(true);
-            method.invoke(webView, false);
-        } catch (Exception e) {
-            // Fallback if reflection fails
-            webView.setFocusable(true);
-            webView.setFocusableInTouchMode(true);
+            });
         }
-        
-        // Force hide any existing keyboard
+
+        // Detect mouse RIGHT-CLICK via motion events (robust across OEMs)
+        webView.setOnGenericMotionListener((v, e) -> {                  // UPDATED
+            if ((e.getSource() & InputDevice.SOURCE_MOUSE) != 0) {
+                int action = e.getActionMasked();
+
+                // Most reliable path: explicit button press with actionButton
+                if (action == MotionEvent.ACTION_BUTTON_PRESS
+                        && e.getActionButton() == MotionEvent.BUTTON_SECONDARY) {
+                    simulateShiftF10Keys();
+                    hadPrimaryDownSinceLastRight = false;
+                    return true;
+                }
+
+                // Fallback for drivers that only tag ACTION_DOWN with a bitmask
+                if (action == MotionEvent.ACTION_DOWN
+                        && (e.getButtonState() & MotionEvent.BUTTON_SECONDARY) != 0) {
+                    simulateShiftF10Keys();
+                    hadPrimaryDownSinceLastRight = false;
+                    return true;
+                }
+
+                // Record recent primary press to detect BACK→right-click translations
+                if (action == MotionEvent.ACTION_BUTTON_PRESS
+                        && e.getActionButton() == MotionEvent.BUTTON_PRIMARY) {
+                    lastPrimaryDownUptimeMs = SystemClock.uptimeMillis();
+                    hadPrimaryDownSinceLastRight = true;
+                }
+            }
+            return false;
+        });
+
+        // Some OEMs only fire it via onTouch
+        webView.setOnTouchListener((v, e) -> {                          // UPDATED
+            if ((e.getSource() & InputDevice.SOURCE_MOUSE) != 0) {
+                if (e.getActionMasked() == MotionEvent.ACTION_DOWN
+                        && (e.getButtonState() & MotionEvent.BUTTON_SECONDARY) != 0) {
+                    simulateShiftF10Keys();
+                    hadPrimaryDownSinceLastRight = false;
+                    return true;
+                }
+
+                if (e.getActionMasked() == MotionEvent.ACTION_DOWN
+                        && (e.getButtonState() & MotionEvent.BUTTON_PRIMARY) != 0) {
+                    lastPrimaryDownUptimeMs = SystemClock.uptimeMillis();
+                    hadPrimaryDownSinceLastRight = true;
+                }
+            }
+            return false;
+        });
+
+        setContentView(webView);
+
+        // Hide any already-open IME once (non-destructive for composition)
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         if (imm != null) {
-            imm.hideSoftInputFromWindow(webView.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
+            imm.hideSoftInputFromWindow(webView.getWindowToken(), 0);
         }
-        
-        // Load the URL
+
         webView.loadUrl(url);
     }
-    
-    private void hideSystemUI() {
-        getWindow().getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        );
-    }
-    
+
+    // Track selection ActionMode so right-click never needs a second BACK
     @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
-            hideSystemUI();
-            // Also force hide keyboard when window gains focus
-            forceHideKeyboard();
-        }
+    public void onActionModeStarted(ActionMode mode) {                  // NEW
+        super.onActionModeStarted(mode);
+        selectionMode = mode;
     }
-    
+
+    @Override
+    public void onActionModeFinished(ActionMode mode) {                 // NEW
+        super.onActionModeFinished(mode);
+        if (selectionMode == mode) selectionMode = null;
+    }
+
     @Override
     public void onBackPressed() {
-        // Disabled for Android TV - prevents accidental closure via right-click/back button
-        // If you need to enable back navigation, uncomment the code below:
-        /*
-        if (webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
-        */
+        // Kiosk-style: ignore back. If needed, implement webView.canGoBack() here.
     }
-    
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        /* 
-         * Android TV Remote Control Key Mappings for Remote Desktop:
-         * - Right Button → Shift+F10 (Context Menu)
-         * - Center/OK Button → Enter Key (pass through)
-         * - Back Button → Disabled (prevents accidental exit)
-         * - Menu Button → Disabled (prevents interference)
-         * - All other keys → Pass through to remote desktop
+        /*
+         * Remote mappings:
+         * - Some remotes map BACK to "mouse right click" semantics → map to Shift+F10.
+         * - Do not synthesize ENTER; let it flow normally.
          */
         switch (keyCode) {
             case KeyEvent.KEYCODE_BACK:
-                // Android TV Remote: Back button → Context Menu (your request!)
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    android.util.Log.e("FullscreenWebView", "BACK BUTTON PRESSED - Triggering context menu");
-                    Toast.makeText(this, "Back Button → Context Menu", Toast.LENGTH_SHORT).show();
-                    simulateShiftF10();
+                    // If WebView started selection/cab, finish it so BACK isn't eaten
+                    if (selectionMode != null) {
+                        selectionMode.finish();                         // NEW
+                    }
+                    simulateShiftF10Keys();
                 }
                 return true;
-            case KeyEvent.KEYCODE_ESCAPE:
-                // Prevent escape key from closing the webview
-                return true;
-            case KeyEvent.KEYCODE_MENU:
-                // Menu key can also trigger context menu
-                if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    android.util.Log.e("FullscreenWebView", "MENU BUTTON PRESSED - Triggering context menu");
-                    Toast.makeText(this, "Menu Button → Context Menu", Toast.LENGTH_SHORT).show();
-                    simulateShiftF10();
-                }
-                return true;
+
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                // Android TV Remote: Right button → Context Menu
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    android.util.Log.e("FullscreenWebView", "RIGHT DPAD PRESSED - Triggering context menu");
-                    Toast.makeText(this, "Right Button → Context Menu", Toast.LENGTH_SHORT).show();
-                    simulateShiftF10();
+                    simulateShiftF10Keys();
                 }
                 return true;
-            case KeyEvent.KEYCODE_DPAD_CENTER:
-            case KeyEvent.KEYCODE_ENTER:
-                // Android TV Remote: Center/OK button → Enter key
-                if (webView != null) {
-                    return webView.dispatchKeyEvent(event);
-                }
-                return true;
+
             default:
-                // For remote desktop: let WebView handle all other key events
-                if (webView != null) {
-                    return webView.dispatchKeyEvent(event);
-                }
                 return super.onKeyDown(keyCode, event);
         }
     }
-    
-    private void simulateShiftF10() {
-        if (webView == null) return;
-        
-        android.util.Log.d("FullscreenWebView", "RIGHT BUTTON PRESSED - Starting context menu simulation");
-        
-        // Primary approach: Your proven Shift+F10 method
-        simulateShiftF10Keys();
-        
-        // Fallback approaches if needed
-        // simulateRightClick();
 
-        
-        android.util.Log.d("FullscreenWebView", "Context menu simulation completed");
-    }
-
+    // Reliable Shift+F10: send F10 with SHIFT meta state (no separate SHIFT events)
     private void simulateShiftF10Keys() {
-        try {
-            // Using your exact approach - full KeyEvent constructor
-            KeyEvent sd = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SHIFT_RIGHT, 0, 0, 0, 0);
-            KeyEvent kd = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_F10, 0, 0, 0, 0);
-            KeyEvent ku = new KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_F10, 0, 0, 0, 0);
-            KeyEvent su = new KeyEvent(0, 0, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SHIFT_RIGHT, 0, 0, 0, 0);
-
-            android.util.Log.e("FullscreenWebView", "Sending Shift+F10 sequence");
-
-            boolean result1 = webView.dispatchKeyEvent(sd);
-            boolean result2 = webView.dispatchKeyEvent(kd);
-            boolean result3 = webView.dispatchKeyEvent(ku);
-            boolean result4 = webView.dispatchKeyEvent(su);
-            
-            android.util.Log.d("FullscreenWebView", String.format(
-                "Shift+F10 key events - Shift Down: %b, F10 Down: %b, F10 Up: %b, Shift Up: %b", 
-                result1, result2, result3, result4
-            ));
-        } catch (Exception e) {
-            android.util.Log.e("FullscreenWebView", "Shift+F10 simulation failed: " + e.getMessage());
-        }
+            long t = SystemClock.uptimeMillis();
+            KeyEvent d = new KeyEvent(t, t, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_F10, 0, KeyEvent.META_SHIFT_ON);
+            KeyEvent u = new KeyEvent(t, t, KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_F10, 0, KeyEvent.META_SHIFT_ON);
+            webView.dispatchKeyEvent(d);
+            webView.dispatchKeyEvent(u);
     }
-    
-    
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        // For remote desktop applications: prioritize WebView input handling
+        // Let WebView consume keys first when focused; otherwise normal Activity handling.
         if (webView != null && webView.hasFocus()) {
-            // Let WebView handle the key event first
-            if (webView.dispatchKeyEvent(event)) {
-                return true;
-            }
+            if (webView.dispatchKeyEvent(event)) return true;
         }
         return super.dispatchKeyEvent(event);
     }
-    
+
     @Override
     protected void onResume() {
         super.onResume();
         if (webView != null) {
             webView.onResume();
-            webView.requestFocus();
-            
-            // Aggressive keyboard hiding for remote desktop
-            forceHideKeyboard();
-            
-            // Additional suppression using reflection
-            try {
-                Method method = webView.getClass().getMethod("setShowSoftInputOnFocus", boolean.class);
-                method.setAccessible(true);
-                method.invoke(webView, false);
-            } catch (Exception e) {
-                // Silent fail
-            }
+            // DO NOT call webView.requestFocus() here — that resets the InputConnection and breaks accents.
         }
     }
-    
-    private void forceHideKeyboard() {
-        // Multiple approaches to ensure keyboard stays hidden
-        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-        if (imm != null) {
-            imm.hideSoftInputFromWindow(webView.getWindowToken(), InputMethodManager.HIDE_NOT_ALWAYS);
-            imm.hideSoftInputFromWindow(webView.getWindowToken(), InputMethodManager.HIDE_IMPLICIT_ONLY);
-            imm.hideSoftInputFromWindow(webView.getWindowToken(), 0);
-        }
-        
-        // Set window flags to prevent keyboard
-        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN 
-                                   | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
-    }
-    
+
     @Override
     protected void onPause() {
         super.onPause();
-        if (webView != null) {
-            webView.onPause();
-        }
+        if (webView != null) webView.onPause();
     }
-    
+
     @Override
     protected void onDestroy() {
-        if (webView != null) {
-            webView.destroy();
-        }
+        if (webView != null) webView.destroy();
         super.onDestroy();
     }
 }
