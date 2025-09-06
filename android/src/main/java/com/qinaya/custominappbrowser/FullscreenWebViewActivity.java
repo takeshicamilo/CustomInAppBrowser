@@ -2,13 +2,13 @@ package com.qinaya.custominappbrowser;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.os.Build;                  // NEW
+import android.os.Build;
 import android.os.Bundle;
-import android.os.SystemClock;            // NEW
-import android.view.ActionMode;           // NEW
-import android.view.InputDevice;          // NEW
+import android.os.SystemClock;
+import android.view.ActionMode;
+import android.view.InputDevice;
 import android.view.KeyEvent;
-import android.view.MotionEvent;          // NEW
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -25,7 +25,7 @@ public class FullscreenWebViewActivity extends Activity {
     private String url;
 
     // Track selection ActionMode to avoid first-Back being eaten after left click
-    private ActionMode selectionMode;     // NEW
+    private ActionMode selectionMode;
 
     // Track recent primary (left) mouse presses to disambiguate BACK from right-click
     private static final long RIGHT_CLICK_BACK_DETECT_WINDOW_MS = 1200L; // within 1.2s after left click
@@ -36,12 +36,6 @@ public class FullscreenWebViewActivity extends Activity {
     public class CustomWebView extends WebView {
         public CustomWebView(Context context) {
             super(context);
-        }
-
-        @Override
-        public boolean requestFocus(int direction, android.graphics.Rect previouslyFocusedRect) {
-            // Allow normal focus (needed for composition/accents)
-            return super.requestFocus(direction, previouslyFocusedRect);
         }
 
         @Override
@@ -67,16 +61,6 @@ public class FullscreenWebViewActivity extends Activity {
                 }
             }
             return super.dispatchKeyEventPreIme(event);
-        }
-
-        @Override
-        public boolean dispatchKeyEvent(KeyEvent event) {
-            return super.dispatchKeyEvent(event);
-        }
-
-        @Override
-        public boolean onTouchEvent(MotionEvent event) {
-            return super.onTouchEvent(event);
         }
     }
 
@@ -138,13 +122,13 @@ public class FullscreenWebViewActivity extends Activity {
         // Keep navigation inside the WebView
         webView.setWebViewClient(new WebViewClient());
 
-        // Remote-desktop: prevent native text-selection/context CAB since we don't need it
-        webView.setLongClickable(false);                                // NEW (optional for RDP)
-        webView.setOnLongClickListener(v -> true);                      // NEW (optional for RDP)
+        // Prevent native text-selection/context CAB in the WebView
+        webView.setLongClickable(false);
+        webView.setOnLongClickListener(v -> true);
 
         // API 23+: catch real context-clicks regardless of selection state
-        if (Build.VERSION.SDK_INT >= 23) {                              // NEW
-            webView.setOnContextClickListener(v -> {                    // NEW
+        if (Build.VERSION.SDK_INT >= 23) {
+            webView.setOnContextClickListener(v -> {
                 simulateShiftF10Keys();
                 hadPrimaryDownSinceLastRight = false;
                 return true;
@@ -152,7 +136,7 @@ public class FullscreenWebViewActivity extends Activity {
         }
 
         // Detect mouse RIGHT-CLICK via motion events (robust across OEMs)
-        webView.setOnGenericMotionListener((v, e) -> {                  // UPDATED
+        webView.setOnGenericMotionListener((v, e) -> {
             if ((e.getSource() & InputDevice.SOURCE_MOUSE) != 0) {
                 int action = e.getActionMasked();
 
@@ -183,7 +167,7 @@ public class FullscreenWebViewActivity extends Activity {
         });
 
         // Some OEMs only fire it via onTouch
-        webView.setOnTouchListener((v, e) -> {                          // UPDATED
+        webView.setOnTouchListener((v, e) -> {
             if ((e.getSource() & InputDevice.SOURCE_MOUSE) != 0) {
                 if (e.getActionMasked() == MotionEvent.ACTION_DOWN
                         && (e.getButtonState() & MotionEvent.BUTTON_SECONDARY) != 0) {
@@ -214,13 +198,13 @@ public class FullscreenWebViewActivity extends Activity {
 
     // Track selection ActionMode so right-click never needs a second BACK
     @Override
-    public void onActionModeStarted(ActionMode mode) {                  // NEW
+    public void onActionModeStarted(ActionMode mode) {
         super.onActionModeStarted(mode);
         selectionMode = mode;
     }
 
     @Override
-    public void onActionModeFinished(ActionMode mode) {                 // NEW
+    public void onActionModeFinished(ActionMode mode) {
         super.onActionModeFinished(mode);
         if (selectionMode == mode) selectionMode = null;
     }
@@ -232,28 +216,26 @@ public class FullscreenWebViewActivity extends Activity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        /*
-         * Remote mappings:
-         * - Some remotes map BACK to "mouse right click" semantics → map to Shift+F10.
-         * - Do not synthesize ENTER; let it flow normally.
-         */
         switch (keyCode) {
             case KeyEvent.KEYCODE_BACK:
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     // If WebView started selection/cab, finish it so BACK isn't eaten
                     if (selectionMode != null) {
-                        selectionMode.finish();                         // NEW
+                        selectionMode.finish();
                     }
                     simulateShiftF10Keys();
                 }
                 return true;
 
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
+           case KeyEvent.KEYCODE_ENTER:
+                // Android TV Remote: Center/OK button → Classic Enter key
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    simulateShiftF10Keys();
+                     if (selectionMode != null) {
+                        selectionMode.finish();
+                    }
+                    simulateEnterKey();
                 }
                 return true;
-
             default:
                 return super.onKeyDown(keyCode, event);
         }
@@ -262,19 +244,26 @@ public class FullscreenWebViewActivity extends Activity {
     // Reliable Shift+F10: send F10 with SHIFT meta state (no separate SHIFT events)
     private void simulateShiftF10Keys() {
             long t = SystemClock.uptimeMillis();
-            KeyEvent d = new KeyEvent(t, t, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_F10, 0, KeyEvent.META_SHIFT_ON);
-            KeyEvent u = new KeyEvent(t, t, KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_F10, 0, KeyEvent.META_SHIFT_ON);
-            webView.dispatchKeyEvent(d);
-            webView.dispatchKeyEvent(u);
+            KeyEvent shiftDown = new KeyEvent(t, t, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SHIFT_LEFT, 0, 0, 0, 0);
+            KeyEvent f10Down   = new KeyEvent(t, t, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_F10, 0, KeyEvent.META_SHIFT_ON, 0, 0);
+            KeyEvent f10Up     = new KeyEvent(t, t, KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_F10, 0, KeyEvent.META_SHIFT_ON, 0, 0);
+            KeyEvent shiftUp   = new KeyEvent(t, t, KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_SHIFT_LEFT, 0, 0, 0, 0);
+
+            webView.dispatchKeyEvent(shiftDown);
+            webView.dispatchKeyEvent(f10Down);
+            webView.dispatchKeyEvent(f10Up);
+            webView.dispatchKeyEvent(shiftUp);
     }
 
-    @Override
-    public boolean dispatchKeyEvent(KeyEvent event) {
-        // Let WebView consume keys first when focused; otherwise normal Activity handling.
-        if (webView != null && webView.hasFocus()) {
-            if (webView.dispatchKeyEvent(event)) return true;
-        }
-        return super.dispatchKeyEvent(event);
+    private void simulateEnterKey() {
+
+            long t0 = SystemClock.uptimeMillis();
+            KeyEvent enterDown = new KeyEvent(t0, t0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER, 0, 0);
+            KeyEvent enterUp = new KeyEvent(t0 + 8, t0 + 8, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER, 0, 0);
+            
+            webView.dispatchKeyEvent(enterDown);
+            webView.dispatchKeyEvent(enterUp);
+            
     }
 
     @Override
